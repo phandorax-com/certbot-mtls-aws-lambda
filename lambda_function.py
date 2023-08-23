@@ -30,18 +30,25 @@ def lambda_handler(event, context):
             KEY = file.read()
 
         response = requests.get(
-            "https://letsencrypt.org/certs/trustid-x3-root.pem.txt")
+            "https://letsencrypt.org/certs/isrgrootx1.pem.txt")
         root_cert = response.text
         if not root_cert.endswith("\n"):
             root_cert += "\n"
 
-        with open("/tmp/trustid-x3-root.pem", 'w') as file:
+        with open("/tmp/isrgrootx1.pem", 'w') as file:
             file.write(root_cert)
 
-        # 3. Concatenar el certificado de cadena con el certificado raíz
+        # 3. Leer y filtrar el chain.pem
         with open(CERT_PATH + "/chain.pem", 'r') as file:
-            chain_cert = file.read()
+            certs = file.read().split("-----END CERTIFICATE-----")
 
+        if len(certs) < 2:
+            raise Exception("No se encontraron suficientes certificados en chain.pem")
+
+        filtered_certs = certs[:-1]
+        chain_cert = "-----END CERTIFICATE-----".join(filtered_certs)
+
+        # 4. Crear truststore.pem 
         truststore = chain_cert
         if not chain_cert.endswith("\n"):
             truststore += "\n"
@@ -52,11 +59,11 @@ def lambda_handler(event, context):
         with open(truststore_path, 'w') as file:
             file.write(truststore)
 
-        # 4. Subir truststore.pem a S3
+        # 5. Subir truststore.pem a S3
         s3_client = boto3.client('s3')
         s3_client.upload_file(truststore_path, S3_BUCKET_NAME, 'truststore.pem')
 
-        # 5. Actualizar AWS Secret Manager
+        # 6. Actualizar AWS Secret Manager
         client = boto3.client('secretsmanager')
         secret_data = {
             "cert": CERT,
