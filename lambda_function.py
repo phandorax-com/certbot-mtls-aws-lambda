@@ -38,18 +38,14 @@ def lambda_handler(event, context):
         with open("/tmp/isrgrootx1.pem", 'w') as file:
             file.write(root_cert)
 
-        # 3. Leer y filtrar el chain.pem
+        # 3. Leer y filtrar el chain.pem seleccionando solo el primer certificado
         with open(CERT_PATH + "/chain.pem", 'r') as file:
             certs = file.read().split("-----END CERTIFICATE-----")
 
-        if len(certs) < 2:
-            raise Exception("No se encontraron suficientes certificados en chain.pem")
+        first_cert = certs[0] + "-----END CERTIFICATE-----"
 
-        filtered_certs = certs[:-1]
-        chain_cert = "-----END CERTIFICATE-----".join(filtered_certs)
-
-        # 4. Crear truststore.pem 
-        truststore = chain_cert
+        # 4. Crear truststore.pem
+        truststore = first_cert
         if not chain_cert.endswith("\n"):
             truststore += "\n"
         truststore += root_cert
