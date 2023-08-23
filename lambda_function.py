@@ -3,7 +3,22 @@ import certbot.main
 import os
 import requests
 import json
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
 
+def load_certificates_from_pem(pem_data):
+    """Divide y carga múltiples certificados desde un archivo PEM."""
+    pem_certs = pem_data.split("-----END CERTIFICATE-----")
+    certificates = []
+
+    for pem in pem_certs:
+        if "-----BEGIN CERTIFICATE-----" in pem:
+            cert_data = (pem + "-----END CERTIFICATE-----").strip()
+            cert = x509.load_pem_x509_certificate(cert_data.encode(), default_backend())
+            certificates.append(cert)
+
+    return certificates
 
 def lambda_handler(event, context):
 
@@ -38,15 +53,17 @@ def lambda_handler(event, context):
         with open("/tmp/isrgrootx1.pem", 'w') as file:
             file.write(root_cert)
 
-        # 3. Leer y filtrar el chain.pem seleccionando solo el primer certificado
+        # 3. Leer y filtrar el chain.pem seleccionando solo el primer certificado usando cryptography
         with open(CERT_PATH + "/chain.pem", 'r') as file:
-            certs = file.read().split("-----END CERTIFICATE-----")
+            certs_data = file.read()
 
-        first_cert = certs[0] + "-----END CERTIFICATE-----"
+        certs = load_certificates_from_pem(certs_data)
+
+        first_cert = certs[0].public_bytes(serialization.Encoding.PEM).decode('utf-8')
 
         # 4. Crear truststore.pem
         truststore = first_cert
-        if not chain_cert.endswith("\n"):
+        if not first_cert.endswith("\n"):
             truststore += "\n"
         truststore += root_cert
 
