@@ -25,13 +25,14 @@ def lambda_handler(event, context):
     try:
         # Obtener las variables de entorno
         DOMAIN_NAME_APIG = os.environ['DOMAIN_NAME_APIG']
+        DOMAIN_NAME_MTLS = os.environ['DOMAIN_NAME_MTLS']
         SECRET_NAME = os.environ['SECRET_NAME']
         S3_BUCKET_NAME = os.environ['S3_BUCKET_NAME']
-        CERT_PATH = '/tmp/config-dir/live/' + DOMAIN_NAME_APIG
+        CERT_PATH = '/tmp/config-dir/live/' + DOMAIN_NAME_MTLS
 
         # 1. Obtener y renovar el certificado usando Certbot
         certbot.main.main([
-            'certonly', '--dns-route53', '-d', DOMAIN_NAME_APIG, '--agree-tos',
+            'certonly', '--dns-route53', '-d', DOMAIN_NAME_MTLS, '--agree-tos',
             '--no-eff-email', '--email', 'support@hocknas.us', '--config-dir',
             '/tmp/config-dir/', '--work-dir', '/tmp/work-dir/', '--logs-dir',
             '/tmp/logs-dir/'
@@ -74,8 +75,10 @@ def lambda_handler(event, context):
 
         # 5. Subir truststore.pem a S3
         s3_client = boto3.client('s3')
-        s3_client.upload_file(truststore_path, S3_BUCKET_NAME, 'truststore.pem')
-
+        with open(truststore_path, 'rb') as file:
+            upload_response = s3_client.put_object(Bucket=S3_BUCKET_NAME, Key='truststore.pem', Body=file)
+        version_id = upload_response.get('VersionId')
+         
         # 6. Actualizar AWS Secret Manager
         client = boto3.client('secretsmanager')
         secret_data = {
@@ -84,8 +87,21 @@ def lambda_handler(event, context):
         }
         client.update_secret(SecretId=SECRET_NAME, SecretString=json.dumps(secret_data))
 
+        # 7. Actualizar la configuración de API Gateway usando Boto3
+        apigateway_client = boto3.client('apigateway')
+        update_response = apigateway_client.update_domain_name(
+            domainName=DOMAIN_NAME_APIG,
+            patchOperations=[
+                {
+                    'op': 'replace',
+                    'path': '/mutualTlsAuthentication/truststoreVersion',
+                    'value': version_id
+                }
+            ]
+        )
+        
         # Mensaje de finalización
-        return "Operación completada exitosamente."
+        return "Operación completada exitosamente. Version ID: " + version_id
 
     except Exception as e:
         print(f"Error: {e}")

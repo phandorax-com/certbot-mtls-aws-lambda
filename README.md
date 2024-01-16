@@ -88,11 +88,15 @@ docker build -t lambda_packager . \
         },
         {
             "Action": [
-                "apigateway:UpdateClientCertificate",
-                "apigateway:GetDomainName"
+                "apigateway:PATCH",
+                "apigateway:AddCertificateToDomain",
+                "apigateway:RemoveCertificateFromDomain"
             ],
             "Effect": "Allow",
-            "Resource": "arn:aws:apigateway:us-east-1::/restapis/<REPLACE_VALUE>",
+            "Resource": [
+                "arn:aws:apigateway:us-east-1::/restapis/<REPLACE_VALUE>",
+                "arn:aws:apigateway:us-east-1::/domainnames/*"
+            ],
             "Sid": "APIGatewayREST"
         },
         {
@@ -124,7 +128,9 @@ docker build -t lambda_packager . \
         {
             "Action": [
                 "s3:PutObject",
-                "s3:GetObject"
+                "s3:GetObject",
+                "s3:GetObjectVersion"
+
             ],
             "Effect": "Allow",
             "Resource": "arn:aws:s3:::<YOUR_BUCKET_NAME_HERE>/*",
